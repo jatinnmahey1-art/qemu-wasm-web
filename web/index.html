@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>QEMU WASM Demo</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="qemu-loader.js"></script>
+</head>
+<body>
+  <h1>QEMU running in the browser (WASM)</h1>
+  <div id="screen">
+    <canvas id="vga"></canvas>
+    <pre id="log"></pre>
+  </div>
+
+  <script>
+    const Module = {
+      canvas: document.getElementById('vga'),
+      print: (text) => { document.getElementById('log').textContent += text + '\n'; },
+      arguments: [
+        '-machine', 'virt',
+        '-cpu', 'rv64',
+        '-m', '256M',
+        '-bios', '/pack/opensbi-riscv64.bin',
+        '-drive', 'file=/pack/alpine.img,if=virtio,format=raw',
+        '-nographic'
+      ]
+    };
+  </script>
+  <script async src="qemu-system-riscv64.js"></script>
+</body>
+</html>
