@@ -1,14 +1,13 @@
-name: Build QEMU → WASM + Deploy to GitHub Pages
+name: Build QEMU → WASM + Deploy
 
 on:
   push:
     branches: [ main ]
   pull_request:
-    branches: [ main ]
   workflow_dispatch:
 
 jobs:
-  build-and-deploy:
+  build:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -16,88 +15,64 @@ jobs:
       id-token: write
 
     steps:
-      # ──────────────────────────────────────────────────────────────
-      # 1. Checkout + submodules
-      # ──────────────────────────────────────────────────────────────
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      # ──────────────────────────────────────────────────────────────
-      # 2. Setup Emscripten (cached)
-      # ──────────────────────────────────────────────────────────────
-      - name: Setup Emscripten SDK
+      - name: Setup Emscripten
         uses: mymindstorm/setup-emsdk@v14
         with:
           version: 3.1.51
           actions-cache-folder: emsdk-cache
 
-      # ──────────────────────────────────────────────────────────────
-      # 3. Cache QEMU source + build artifacts
-      # ──────────────────────────────────────────────────────────────
-      - name: Cache QEMU build
-        id: cache-qemu
+      - name: Cache QEMU
         uses: actions/cache@v4
+        id: cache
         with:
           path: |
             qemu/
             qemu-build/
-          key: qemu-wasm-${{ runner.os }}-${{ hashFiles('patches/*.patch') }}
-          restore-keys: |
-            qemu-wasm-${{ runner.os }}-
+          key: qemu-wasm-v3-${{ hashFiles('patches/*.patch') }}
+          restore-keys: qemu-wasm-v3-
 
-      # ──────────────────────────────────────────────────────────────
-      # 4. Clone & patch QEMU (skip if cache hit)
-      # ──────────────────────────────────────────────────────────────
-      - name: Clone QEMU (if not cached)
-        if: steps.cache-qemu.outputs.cache-hit != 'true'
+      - name: Clone QEMU
+        if: steps.cache.outputs.cache-hit != 'true'
         run: |
-          git clone --depth 1 https://gitlab.com/qemu-project/qemu.git
+          git clone --depth 1 --branch v9.1.0 https://gitlab.com/qemu-project/qemu.git
 
-      - name: Apply patches
+      - name: Fix patch line endings & apply
         run: |
+          # Convert CRLF → LF
+          find patches -name "*.patch" -exec sed -i 's/\r$//' {} \;
+          
           cd qemu
-          git apply ../patches/*.patch || { echo "Patch failed"; exit 1; }
+          for p in ../patches/*.patch; do
+            echo "=== Applying $p ==="
+            git apply --check "$p" || exit 1
+            git apply "$p" || exit 1
+          done
 
-      # ──────────────────────────────────────────────────────────────
-      # 5. Build QEMU → WASM (multi-thread + Asyncify)
-      # ──────────────────────────────────────────────────────────────
-      - name: Configure & build QEMU
-        env:
-          EMSDK: ${{ env.EMSDK }}
+      - name: Build QEMU WASM
         run: |
           source $EMSDK/emsdk_env.sh
-
           mkdir -p qemu-build && cd qemu-build
-
+          
           ../qemu/configure \
             --target-list=riscv64-softmmu \
-            --disable-system \
-            --disable-user \
-            --disable-pie \
-            --disable-werror \
-            --extra-cflags="-s USE_PTHREADS=1 -s PTHREAD_POOL_SIZE=8 -O3 -flto" \
-            --extra-ldflags="-s USE_PTHREADS=1 -s ASYNCIFY=1 -s ASYNCIFY_STACK_SIZE=262144 -s EXIT_RUNTIME=1 -s MALLOC=dlmalloc"
+            --disable-system --disable-user --disable-pie \
+            --extra-cflags="-s USE_PTHREADS=1 -O3" \
+            --extra-ldflags="-s ASYNCIFY=1 -s PTHREAD_POOL_SIZE=8 -s ASYNCIFY_STACK_SIZE=262144"
 
           emmake make -j$(nproc) qemu-system-riscv64
 
-      # ──────────────────────────────────────────────────────────────
-      # 6. Package JS/WASM + preload assets
-      # ──────────────────────────────────────────────────────────────
-      - name: Package web assets
-        env:
-          EMSDK: ${{ env.EMSDK }}
+      - name: Package Web Assets
         run: |
           source $EMSDK/emsdk_env.sh
-
-          # Prepare preload directory
           mkdir -p web/preload
-          cp -r web/assets/alpine.img web/assets/bios web/preload/
+          cp web/assets/alpine.img web/assets/bios/* web/preload/
 
-          # Build final .html + .js + .wasm
-          emcc \
-            qemu-build/riscv64-softmmu/qemu-system-riscv64 \
+          emcc qemu-build/riscv64-softmmu/qemu-system-riscv64 \
             -o web/qemu-system-riscv64.html \
             --preload-file web/preload@/ \
             -s FORCE_FILESYSTEM=1 \
@@ -105,23 +80,15 @@ jobs:
             -s ASYNCIFY=1 \
             -s USE_PTHREADS=1 \
             -s PTHREAD_POOL_SIZE=8 \
-            -s ASYNCIFY_STACK_SIZE=262144 \
-            -s MALLOC=dlmalloc \
-            -s ALLOW_MEMORY_GROWTH=1 \
             -s INITIAL_MEMORY=512MB \
-            -s TOTAL_STACK=64MB \
-            -O3 -flto
+            -O3
 
-          # Clean up preload dir
           rm -rf web/preload
 
-      # ──────────────────────────────────────────────────────────────
-      # 7. Upload to GitHub Pages
-      # ──────────────────────────────────────────────────────────────
-      - name: Upload GitHub Pages artifact
+      - name: Upload Pages
         uses: actions/upload-pages-artifact@v3
         with:
           path: web/
 
-      - name: Deploy to GitHub Pages
+      - name: Deploy
         uses: actions/deploy-pages@v4
