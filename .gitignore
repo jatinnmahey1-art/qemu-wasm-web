@@ -1,0 +1,11 @@
+# Build artefacts
+qemu/
+qemu-build/
+web/*.js
+web/*.wasm
+web/*.html
+web/qemu-system-*.mem
+web/qemu-system-*.data
+
+# Emscripten cache
+emsdk-cache/
