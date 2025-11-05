@@ -1,0 +1,4 @@
+# One-liner to create a minimal bootable image (run locally)
+dd if=/dev/zero of=web/assets/alpine.img bs=1M count=64
+mkfs.ext4 web/assets/alpine.img
+# Mount, copy Alpine ISO contents, umount → ready
