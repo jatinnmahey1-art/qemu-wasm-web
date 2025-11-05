@@ -1,0 +1,15 @@
+diff --git a/util/glib-compat.c b/util/glib-compat.c
+index a1b2c3d4e5..f6g7h8i9j0 100644
+--- a/util/glib-compat.c
++++ b/util/glib-compat.c
+@@ -11,6 +11,10 @@
+ #include "qemu/osdep.h"
+ #include "qemu/glib-compat.h"
+ 
++#ifdef __EMSCRIPTEN__
++#define g_thread_supported() 1
++#endif
++
+ void qemu_init_main_loop(void)
+ {
+     if (!g_thread_supported()) {
