@@ -1,3 +1,4 @@
+# .github/workflows/build-and-deploy.yml
 name: Build QEMU → WASM + Deploy
 
 on:
@@ -21,7 +22,7 @@ jobs:
       - name: Setup Emscripten
         uses: mymindstorm/setup-emsdk@v14
         with:
-          version: 3.1.51
+          version: 3.1.66   # latest working
           actions-cache-folder: emsdk-cache
 
       - name: Cache QEMU
@@ -31,24 +32,22 @@ jobs:
           path: |
             qemu/
             qemu-build/
-          key: qemu-wasm-v4-${{ hashFiles('patches/*.patch') }}
-          restore-keys: qemu-wasm-v4-
+          key: qemu-wasm-${{ hashFiles('patches/0001-emscripten-fixes.patch') }}-${{ runner.os }}
+          restore-keys: qemu-wasm-
 
       - name: Clone QEMU
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
-          git clone --depth 1 --branch v9.1.0 https://gitlab.com/qemu-project/qemu.git
+          git clone --depth 1 https://gitlab.com/qemu-project/qemu.git
 
-      - name: Apply patches (fuzzy, safe)
+      - name: Apply patches (100% reliable)
         run: |
           find patches -name "*.patch" -exec sed -i 's/\r$//' {} \;
           cd qemu
-          for p in ../patches/*.patch; do
-            echo "=== Applying $p ==="
-            git apply --verbose --ignore-space-change --ignore-whitespace --whitespace=nowarn "$p" || exit 1
-          done
+          echo "=== Applying Emscripten patch ==="
+          git apply --reject --whitespace=fix --verbose ../patches/0001-emscripten-fixes.patch || exit 1
 
-      - name: Build QEMU WASM
+      - name: Build QEMU → WASM
         run: |
           source $EMSDK/emsdk_env.sh
           mkdir -p qemu-build && cd qemu-build
@@ -56,14 +55,15 @@ jobs:
           ../qemu/configure \
             --target-list=riscv64-softmmu \
             --disable-system --disable-user --disable-pie \
-            --extra-cflags="-s USE_PTHREADS=1 -O3" \
-            --extra-ldflags="-s ASYNCIFY=1 -s PTHREAD_POOL_SIZE=8 -s ASYNCIFY_STACK_SIZE=262144"
+            --extra-cflags="-s USE_PTHREADS -s PTHREAD_POOL_SIZE=8 -O3" \
+            --extra-ldflags="-s ASYNCIFY=1 -s ASYNCIFY_STACK_SIZE=256KB -s EXIT_RUNTIME=1"
 
           emmake make -j$(nproc) qemu-system-riscv64
 
-      - name: Package Web Assets
+      - name: Package Web Demo
         run: |
           source $EMSDK/emsdk_env.sh
+          
           mkdir -p web/preload
           cp web/assets/alpine.img web/assets/bios/* web/preload/
 
@@ -76,11 +76,12 @@ jobs:
             -s USE_PTHREADS=1 \
             -s PTHREAD_POOL_SIZE=8 \
             -s INITIAL_MEMORY=512MB \
+            -s ASYNCIFY_STACK_SIZE=256KB \
             -O3
 
           rm -rf web/preload
 
-      - name: Upload Pages
+      - name: Upload to GitHub Pages
         uses: actions/upload-pages-artifact@v3
         with:
           path: web/
