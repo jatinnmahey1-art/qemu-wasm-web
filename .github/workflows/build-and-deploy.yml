@@ -1,0 +1,73 @@
+name: Build QEMU → WASM + Deploy Demo
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 3.1.51
+          actions-cache-folder: emsdk-cache
+
+      - name: Cache QEMU build
+        uses: actions/cache@v4
+        with:
+          path: qemu-build/
+          key: qemu-wasm-${{ hashFiles('patches/*.patch') }}-${{ runner.os }}
+
+      - name: Clone & patch QEMU
+        run: |
+          git clone --depth 1 https://gitlab.com/qemu-project/qemu.git
+          cd qemu
+          git apply ../patches/*.patch
+
+      - name: Build qemu-system-riscv64
+        run: |
+          source $EMSDK/emsdk_env.sh
+          cd qemu
+          mkdir -p ../qemu-build && cd ../qemu-build
+          ../qemu/configure \
+            --target-list=riscv64-softmmu \
+            --disable-system --enable-linux-user=no \
+            --extra-cflags="-s USE_PTHREADS=1 -s PTHREAD_POOL_SIZE=8 -O3" \
+            --extra-ldflags="-s USE_PTHREADS=1 -s ASYNCIFY=1 -s ASYNCIFY_STACK_SIZE=131072"
+          emmake make -j$(nproc) qemu-system-riscv64
+
+      - name: Package preload files
+        run: |
+          source $EMSDK/emsdk_env.sh
+          mkdir -p web/assets/pack
+          cp web/assets/alpine.img web/assets/bios/* web/assets/pack/
+          emcc -s FORCE_FILESYSTEM=1 -s EXIT_RUNTIME=1 \
+            -s ASYNCIFY=1 -s USE_PTHREADS=1 \
+            qemu-build/riscv64-softmmu/qemu-system-riscv64 \
+            -o web/qemu-system-riscv64.html \
+            --preload-file web/assets/pack@/
+
+      - name: Upload artifact for GitHub Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
