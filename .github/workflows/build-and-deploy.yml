@@ -17,8 +17,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Setup Emscripten
         uses: mymindstorm/setup-emsdk@v14
@@ -33,24 +31,21 @@ jobs:
           path: |
             qemu/
             qemu-build/
-          key: qemu-wasm-v3-${{ hashFiles('patches/*.patch') }}
-          restore-keys: qemu-wasm-v3-
+          key: qemu-wasm-v4-${{ hashFiles('patches/*.patch') }}
+          restore-keys: qemu-wasm-v4-
 
       - name: Clone QEMU
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
           git clone --depth 1 --branch v9.1.0 https://gitlab.com/qemu-project/qemu.git
 
-      - name: Fix patch line endings & apply
+      - name: Apply patches (fuzzy, safe)
         run: |
-          # Convert CRLF → LF
           find patches -name "*.patch" -exec sed -i 's/\r$//' {} \;
-          
           cd qemu
           for p in ../patches/*.patch; do
             echo "=== Applying $p ==="
-            git apply --check "$p" || exit 1
-            git apply "$p" || exit 1
+            git apply --verbose --ignore-space-change --ignore-whitespace --whitespace=nowarn "$p" || exit 1
           done
 
       - name: Build QEMU WASM
