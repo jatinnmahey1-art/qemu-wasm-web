@@ -32,8 +32,8 @@ jobs:
           path: |
             qemu/
             qemu-build/
-          key: qemu-wasm-final-${{ hashFiles('patches/0001-emscripten-fixes.patch') }}
-          restore-keys: qemu-wasm-final-
+          key: qemu-wasm-final-v2-${{ hashFiles('patches/0001-emscripten-fixes.patch') }}
+          restore-keys: qemu-wasm-final-v2-
 
       - name: Clone QEMU
         if: steps.cache.outputs.cache-hit != 'true'
@@ -43,13 +43,13 @@ jobs:
       - name: Fix line endings
         run: |
           find patches -name "*.patch" -exec sed -i 's/\r$//' {} \;
-          find patches -name "*.patch" -exec dos2unix {} \;
+          find patches -name "*.patch" -exec dos2unix {} \; 2>/dev/null || true
 
       - name: Apply patch
         run: |
           cd qemu
-          echo "=== Applying patch ==="
-          git apply --verbose --whitespace=fix ../patches/0001-emscripten-fixes.patch && echo "Patch applied successfully"
+          echo "=== Applying Emscripten patch ==="
+          git apply --verbose --whitespace=fix ../patches/0001-emscripten-fixes.patch && echo "PATCH SUCCESS"
 
       - name: Build QEMU
         run: |
