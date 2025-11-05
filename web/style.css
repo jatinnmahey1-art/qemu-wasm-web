@@ -1,0 +1,4 @@
+body { font-family: system-ui, sans-serif; margin: 2rem; background:#111; color:#eee; }
+#screen { background:#000; display:flex; gap:1rem; }
+canvas { image-rendering: pixelated; }
+#log { margin:0; padding:0.5rem; background:#222; flex:1; white-space:pre-wrap; }
