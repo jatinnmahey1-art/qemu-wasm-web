@@ -1,0 +1,4 @@
+qemu/
+qemu-build/
+node_modules/
+*.log
