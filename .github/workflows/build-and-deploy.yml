@@ -1,5 +1,5 @@
 # .github/workflows/build-and-deploy.yml
-name: Build QEMU → WASM + Deploy
+name: Build QEMU WASM + Deploy
 
 on:
   push:
@@ -32,26 +32,24 @@ jobs:
           path: |
             qemu/
             qemu-build/
-          key: qemu-wasm-v5-${{ hashFiles('patches/0001-emscripten-fixes.patch') }}
-          restore-keys: qemu-wasm-v5-
+          key: qemu-wasm-final-${{ hashFiles('patches/0001-emscripten-fixes.patch') }}
+          restore-keys: qemu-wasm-final-
 
       - name: Clone QEMU
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
           git clone --depth 1 https://gitlab.com/qemu-project/qemu.git
 
-      - name: Fix patch line endings
+      - name: Fix line endings
         run: |
           find patches -name "*.patch" -exec sed -i 's/\r$//' {} \;
+          find patches -name "*.patch" -exec dos2unix {} \;
 
       - name: Apply patch
         run: |
           cd qemu
           echo "=== Applying patch ==="
-          git apply --verbose --whitespace=fix ../patches/0001-emscripten-fixes.patch || {
-            echo "PATCH FAILED"
-            exit 1
-          }
+          git apply --verbose --whitespace=fix ../patches/0001-emscripten-fixes.patch && echo "Patch applied successfully"
 
       - name: Build QEMU
         run: |
