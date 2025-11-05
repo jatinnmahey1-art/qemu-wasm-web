@@ -1,0 +1,19 @@
+diff --git a/configure b/configure
+index 1a2b3c4d5e..5f6e7d8c9a 100755
+--- a/configure
++++ b/configure
+@@ -5308,6 +5308,14 @@ if test "$targetos" = "Linux"; then
+   linux_user="yes"
+ fi
+ 
++# Force enable riscv64-softmmu for Emscripten (WASM)
++if test "$cpu" = "wasm32" || test "$cpu" = "wasm64"; then
++  case "$target_list" in
++    *riscv64-softmmu*) ;;
++    *) target_list="riscv64-softmmu $target_list" ;;
++  esac
++fi
++
+ # Default value for slirp
+ if test "$slirp" = ""; then
+   slirp="yes"
