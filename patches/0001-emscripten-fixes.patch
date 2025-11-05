@@ -1,0 +1,47 @@
+diff --git a/configure b/configure
+index 1111111..2222222 100755
+--- a/configure
++++ b/configure
+@@ -30,6 +30,20 @@
+ # Probe for compilers
+ #
+ 
++# --------------------------------------------------------------
++# EMSCRIPTEN / WASM SPECIAL HACKS
++# --------------------------------------------------------------
++if [ "${CC#*emcc}" != "$CC" ] || [ "${CXX#*em++}" != "$CXX" ]; then
++    echo "=== Emscripten detected - forcing riscv64-softmmu ==="
++    # Force the target even if user didn't ask
++    target_list="riscv64-softmmu $target_list"
++    # Disable everything that doesn't work in browser
++    pie="no"
++    kvm="no"
++    xen="no"
++    bsd_user="no"
++    linux_user="no"
++fi
++
+ pass_cc_args() {
+     # Accumulate args in CC_ARGS so we can re-use them for the feature tests
+     while [ $# -gt 0 ]; do
+diff --git a/util/glib-compat.c b/util/glib-compat.c
+index 3333333..4444444 100644
+--- a/util/glib-compat.c
++++ b/util/glib-compat.c
+@@ -1,5 +1,15 @@
+ #include "qemu/osdep.h"
+ #include "qemu/glib-compat.h"
+ 
++#ifdef __EMSCRIPTEN__
++/* Emscripten has pthread stubs, but g_thread_init() crashes */
++#undef g_thread_supported
++#define g_thread_supported() 1
++#undef g_thread_init
++#define g_thread_init(arg) do { } while(0)
++#undef g_thread_new
++#define g_thread_new(name, func, data) pthread_self()
++#endif
++
+ void qemu_init_main_loop(void)
+ {
+     if (!g_thread_supported()) {
